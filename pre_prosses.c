@@ -1,11 +1,19 @@
-#include <stdio.h>
-#include <stdio.h>
-#include <math.h>
+#include    <stdio.h>
+#include    <math.h>
+#include    <stdlib.h>
+#include    <string.h>
 
-const char* MACRO_NAME = "mcro";
-const int MAX_MACRO_SIZE = 100;
-const char* MACRO_TABLE[MAX_MACRO_SIZE];
-const char* END_MACRO = "mcroend";
+#define         MAX_MACRO_SIZE 100 
+
+const char*     MACRO_NAME = "mcro";
+const char*     MACRO_TABLE[MAX_MACRO_SIZE];
+const char*     END_MACRO = "mcroend";
+const int       MAX_LINE_SIZE = 256;
+
+char* read_line();
+int is_macro(char* line);
+void write_macro(char* line);
+void del_line(char* line);
 
 void main()
 {
@@ -50,6 +58,8 @@ void main()
 }
 char* read_line()
 {
+    char** line = malloc(sizeof(char)*MAX_LINE_SIZE);
+    
     FILE *file = fopen("input.txt", "r");
 
     if (file == NULL) 
@@ -58,21 +68,20 @@ char* read_line()
         return NULL;
     }
 
-    char line[256];
 
-    if (fgets(line, sizeof(line), file) != NULL) 
+    if (fgets(*line, sizeof(*line), file) != NULL) 
     {
         int i;
-        for (i = 0; line[i] != '\n'; i++) 
+        for (i = 0; *line[i] != '\n'; i++) 
         {
-            if (line[i] == '\n')
+            if (*line[i] == '\n')
             {
                 break;
             }
         }
     }
     fclose(file);
-    return line;
+    return *line;
 }
 int is_macro(char* line)
 {
