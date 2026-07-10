@@ -1,28 +1,10 @@
-/*
- * pre_processor.c  –  Phase 0: Macro pre-processing.
- *
- *  Reads the raw source file (.as), expands all macro definitions,
- *  and writes the expanded output to a new file (.am).
- *
- *  Grammar handled:
- *      mcro <name>
- *          <body lines…>
- *      mcroend
- *
- *  Rules:
- *   - A macro call is any line whose first token matches a stored macro name.
- *   - Macro definitions are NOT copied to the output.
- *   - Macro bodies ARE copied at every call site.
- *   - Comment lines (starting with ';') pass through unchanged.
- *   - Blank lines pass through unchanged.
- *   - Macro names must satisfy is_valid_label().
- */
+/* Phase 0: Macro pre-processing. */
 #include "defs.h"
 
 #define MCRO_START  "mcro"
 #define MCRO_END    "mcroend"
 
-/* ── Macro storage ──────────────────────────────────────────── */
+// Macro storage
 typedef struct {
     char  name[MAX_MACRO_NAME_LEN];
     char  lines[MAX_MACRO_LINES][MAX_LINE_LEN];
@@ -32,16 +14,11 @@ typedef struct {
 static Macro   s_macros[MAX_MACROS];
 static int     s_macro_count = 0;
 
-/* ── Forward declarations ───────────────────────────────────── */
+// Forward declarations
 static Macro  *find_macro(const char *name);
 static int     add_macro(const char *name);
 
-/* ────────────────────────────────────────────────────────────
- * pre_process
- *   src_path – path to the raw .as source file
- *   out_path – path to write the expanded .am file
- *   Returns 0 on success, non-zero on error.
- * ──────────────────────────────────────────────────────────── */
+/* pre_process: expands macros and writes to out_path */
 int pre_process(const char *src_path, const char *out_path)
 {
     FILE *src_fp;
@@ -49,8 +26,8 @@ int pre_process(const char *src_path, const char *out_path)
     char  raw_line[MAX_LINE_LEN];
     char  line[MAX_LINE_LEN];
     int   line_num          = 0;
-    int   inside_macro_def  = 0;      /* are we inside a mcro…mcroend? */
-    int   current_macro_idx = -1;
+    int   inside_macro_def  = 0;
+    int   current_macro_idx = NO_MACRO_INDEX;
     Macro *macro_ptr;
     char  *first_token;
     char  *rest;
@@ -84,13 +61,13 @@ int pre_process(const char *src_path, const char *out_path)
                 line[len - 1] = '\0';
         }
 
-        /* extract first token */
+        //first token
         strncpy(buf, line, MAX_LINE_LEN - 1);
         buf[MAX_LINE_LEN - 1] = '\0';
         first_token = strtok(buf, " \t");
-        rest        = strtok(NULL, "");   /* everything after first token */
+        rest        = strtok(NULL, "");   // everything after first token
 
-        /* ── empty / comment line ──────────────────────── */
+        // empty or comment line
         if (first_token == NULL || first_token[0] == ';')
         {
             if (!inside_macro_def)
@@ -98,21 +75,21 @@ int pre_process(const char *src_path, const char *out_path)
             continue;
         }
 
-        /* ── mcroend ───────────────────────────────────── */
+        // macsos mcroend 
         if (strcmp(first_token, MCRO_END) == 0)
         {
             if (!inside_macro_def)
             {
                 fprintf(stderr, "ERROR %s:%d – mcroend without mcro\n",
                         src_path, line_num);
-                g_error_count++;
+                error_count++;
             }
             inside_macro_def  = 0;
-            current_macro_idx = -1;
+            current_macro_idx = NO_MACRO_INDEX;
             continue;
         }
 
-        /* ── mcro <name> ───────────────────────────────── */
+        // mcro <name> 
         if (strcmp(first_token, MCRO_START) == 0)
         {
             char *macro_name = rest ? str_trim(rest) : NULL;
@@ -121,25 +98,25 @@ int pre_process(const char *src_path, const char *out_path)
             {
                 fprintf(stderr, "ERROR %s:%d – nested mcro not allowed\n",
                         src_path, line_num);
-                g_error_count++;
+                error_count++;
                 continue;
             }
             if (macro_name == NULL || !is_valid_label(macro_name))
             {
                 fprintf(stderr, "ERROR %s:%d – invalid macro name\n",
                         src_path, line_num);
-                g_error_count++;
+                error_count++;
                 continue;
             }
             if (find_macro(macro_name) != NULL)
             {
                 fprintf(stderr, "ERROR %s:%d – macro '%s' redefined\n",
                         src_path, line_num, macro_name);
-                g_error_count++;
+                error_count++;
                 continue;
             }
             current_macro_idx = add_macro(macro_name);
-            if (current_macro_idx < 0)
+            if (current_macro_idx == MACRO_TABLE_FULL)
             {
                 fprintf(stderr, "FATAL %s:%d – macro table full\n",
                         src_path, line_num);
@@ -151,7 +128,7 @@ int pre_process(const char *src_path, const char *out_path)
             continue;
         }
 
-        /* ── inside a macro definition: store the body line ── */
+        // inside a macro definition: store the body line 
         if (inside_macro_def)
         {
             Macro *m = &s_macros[current_macro_idx];
@@ -165,22 +142,41 @@ int pre_process(const char *src_path, const char *out_path)
             {
                 fprintf(stderr, "ERROR %s:%d – macro body too long\n",
                         src_path, line_num);
-                g_error_count++;
+                error_count++;
             }
             continue;
         }
 
-        /* ── macro call? ───────────────────────────────── */
-        macro_ptr = find_macro(first_token);
-        if (macro_ptr != NULL)
+        // macro call
         {
-            int k;
-            for (k = 0; k < macro_ptr->line_count; k++)
-                fprintf(out_fp, "%s\n", macro_ptr->lines[k]);
-            continue;
+            char *macro_check = first_token;
+            char *label_to_print = NULL;
+            int tok_len = strlen(first_token);
+
+            if (tok_len > 0 && first_token[tok_len - 1] == ':')
+            {
+                char *next_tok = strtok(rest, " \t");
+                if (next_tok != NULL)
+                {
+                    label_to_print = first_token;
+                    macro_check = next_tok;
+                }
+            }
+
+            macro_ptr = find_macro(macro_check);
+            if (macro_ptr != NULL)
+            {
+                int k;
+                if (label_to_print != NULL)
+                {
+                    fprintf(out_fp, "%s\n", label_to_print);
+                }
+                for (k = 0; k < macro_ptr->line_count; k++)
+                    fprintf(out_fp, "%s\n", macro_ptr->lines[k]);
+                continue;
+            }
         }
 
-        /* ── ordinary line: copy as-is ─────────────────── */
         fprintf(out_fp, "%s\n", line);
     }
 
@@ -188,7 +184,7 @@ int pre_process(const char *src_path, const char *out_path)
     {
         fprintf(stderr, "ERROR %s – mcro not closed at end of file\n",
                 src_path);
-        g_error_count++;
+        error_count++;
     }
 
     fclose(src_fp);
@@ -196,7 +192,6 @@ int pre_process(const char *src_path, const char *out_path)
     return 0;
 }
 
-/* ── Internal helpers ───────────────────────────────────────── */
 
 static Macro *find_macro(const char *name)
 {
@@ -212,7 +207,7 @@ static Macro *find_macro(const char *name)
 static int add_macro(const char *name)
 {
     if (s_macro_count >= MAX_MACROS)
-        return -1;
+        return MACRO_TABLE_FULL;
     strncpy(s_macros[s_macro_count].name, name, MAX_MACRO_NAME_LEN - 1);
     s_macros[s_macro_count].name[MAX_MACRO_NAME_LEN - 1] = '\0';
     s_macros[s_macro_count].line_count = 0;

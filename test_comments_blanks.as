@@ -1,0 +1,35 @@
+; ============================================================
+; test_comments_blanks.as  –  Comments and blank line handling
+;
+;  Tests:
+;   - Lines starting with ';'
+;   - Inline comments (not supported in MIPS asm but should not crash)
+;   - Empty file sections
+;   - Macro with comment-only lines in body
+; ============================================================
+
+; this is a comment
+
+; another comment line
+
+
+mcro NOP_MACRO
+    addi  $0, $0, 0
+mcroend
+
+; comment between macro and code
+
+start:  NOP_MACRO
+
+; comment after first instruction
+
+        addi    $8, $0, 1
+
+; comment between instructions
+
+        jr      $31
+
+; comment at end of file
+; another trailing comment
+
+.entry start

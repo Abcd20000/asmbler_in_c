@@ -1,0 +1,86 @@
+; ============================================================
+; test_full.as  –  MMN 14 canonical test (all instruction types)
+;
+;  Tests:
+;   - All R-type: add, addu, sub, subu, and, or, nor, slt, sltu
+;   - Shift R-type: sll, srl
+;   - Jump-register R: jr
+;   - All I-type: addi, addiu, andi, ori, xori, slti, sltiu
+;   - Branch I: beq, bne
+;   - Load/store I: lw, sw
+;   - J-type: j, jal
+;   - Directives: .db, .dh, .dw, .asciz, .entry, .extern
+;   - Labels (forward and backward), macro expansion
+; ============================================================
+
+.extern ext_func
+
+mcro PUSH
+    addi  $29, $29, -4
+    sw    $31, 0($29)
+mcroend
+
+mcro POP
+    lw    $31, 0($29)
+    addi  $29, $29, 4
+mcroend
+
+; -- program entry --------------------------------------------
+main:   addi    $8,  $0,  5         
+        addi    $9,  $0,  3         
+
+; -- all arithmetic R -----------------------------------------
+        add     $10, $8,  $9        
+        addu    $11, $8,  $9        
+        sub     $12, $8,  $9        
+        subu    $13, $8,  $9        
+        and     $14, $8,  $9        
+        or      $15, $8,  $9        
+        nor     $16, $8,  $9        
+        slt     $17, $9,  $8        
+        sltu    $18, $9,  $8        
+
+; -- shifts ---------------------------------------------------
+        sll     $19, $8,  2         
+        srl     $20, $8,  1         
+
+; -- all immediate I ------------------------------------------
+        addiu   $21, $0,  100
+        andi    $22, $8,  0x0F
+        ori     $23, $0,  0xFF
+        xori    $24, $0,  0xAA
+        slti    $25, $8,  10        
+        sltiu   $26, $8,  10        
+
+; -- load / store ---------------------------------------------
+        lw      $27, 0($0)
+        sw      $27, 4($0)
+
+; -- branch forward -------------------------------------------
+        beq     $10, $11, skip1     
+        addi    $0,  $0,  0         
+skip1:  bne     $8,  $9,  skip2     
+        addi    $0,  $0,  0         
+skip2:
+
+; -- macro use ------------------------------------------------
+        PUSH
+        jal     ext_func
+        POP
+
+; -- unconditional jump ---------------------------------------
+        j       end_prog
+
+; -- never reached ---------------------------------------------
+        addi    $0, $0, 0
+
+end_prog: jr    $31
+
+; -- data section ---------------------------------------------
+msg:    .asciz  "Hello, MMN14!"
+byte_d: .db     0, 1, 127, -1
+half_d: .dh     0x1234, -1
+word_d: .dw     0x12345678, -1, 0
+
+.entry main
+.entry end_prog

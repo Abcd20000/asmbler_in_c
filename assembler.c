@@ -1,36 +1,17 @@
-/*
- * assembler.c  –  Main driver: ties all phases together.
- *
- *  Usage:  assembler <file1.as> [file2.as …]
- *
- *  For each source file  <stem>.as  the driver:
- *    Phase 0  pre_process()   →  <stem>.am
- *    Phase 1  first_pass()    reads <stem>.am, fills images + symbol table
- *    Phase 2  second_pass()   re-reads <stem>.am, patches labels,
- *                              writes <stem>.ob / <stem>.ent / <stem>.ext
- *
- *  Global images and counters are reset between files.
- */
 #include "defs.h"
 
-/* ── Globals defined here (declared extern in defs.h) ───────── */
-unsigned int  g_code_image[MAX_CODE_IMAGE];
-unsigned char g_data_image[MAX_DATA_IMAGE];
-int           g_ic          = IC_INIT;
-int           g_dc          = 0;
-int           g_error_count = 0;
-Symbol        g_sym_table[MAX_SYMBOL_TABLE];
-int           g_sym_count   = 0;
+unsigned int  code_image[MAX_CODE_IMAGE];
+unsigned char data_image[MAX_DATA_IMAGE];
+int           IC          = IC_INIT;
+int           DC          = 0;
+int           error_count = 0;
+Symbol        symbol_table[MAX_SYMBOL_TABLE];
+int           symbol_count = 0;
 
-/* ── Forward declaration ─────────────────────────────────────── */
 static void reset_globals(void);
-static void build_path(char *dest, size_t dest_size,
-                       const char *stem, const char *ext);
+static void build_path(char *dest, size_t dest_size, const char *stem, const char *ext);
 static int  get_stem(char *dest, size_t dest_size, const char *path);
 
-/* ────────────────────────────────────────────────────────────
- * main
- * ──────────────────────────────────────────────────────────── */
 int main(int argc, char *argv[])
 {
     int file_idx;
@@ -38,20 +19,19 @@ int main(int argc, char *argv[])
 
     if (argc < 2)
     {
-        fprintf(stderr, "Usage: %s <file.as> [file2.as …]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <file.as>\n", argv[0]);
         return 1;
     }
 
     for (file_idx = 1; file_idx < argc; file_idx++)
     {
-        char stem[256];
-        char am_path[256];
-        char ob_path[256];
-        char ent_path[256];
-        char ext_path[256];
+        char stem[PATH_BUF_SIZE];
+        char am_path[PATH_BUF_SIZE];
+        char ob_path[PATH_BUF_SIZE];
+        char ent_path[PATH_BUF_SIZE];
+        char ext_path[PATH_BUF_SIZE];
         int  rc;
 
-        /* ── extract stem (strip .as suffix if present) ─── */
         if (get_stem(stem, sizeof(stem), argv[file_idx]) != 0)
         {
             fprintf(stderr, "ERROR: path too long: %s\n", argv[file_idx]);
@@ -68,83 +48,64 @@ int main(int argc, char *argv[])
 
         printf("=== Assembling: %s ===\n", argv[file_idx]);
 
-        /* ── Phase 0: pre-processing ────────────────────── */
         rc = pre_process(argv[file_idx], am_path);
-        if (rc != 0 || g_error_count > 0)
+        if (rc != 0 || error_count > 0)
         {
-            fprintf(stderr, "  Pre-processor failed (%d errors).\n",
-                    g_error_count);
-            total_errors += g_error_count;
+            fprintf(stderr, "  Pre-processor failed (%d errors).\n", error_count);
+            total_errors += error_count;
             continue;
         }
-        printf("  Phase 0 OK  →  %s\n", am_path);
 
-        /* ── Phase 1: first pass ────────────────────────── */
         rc = first_pass(am_path);
-        if (rc != 0 || g_error_count > 0)
+        if (rc != 0 || error_count > 0)
         {
-            fprintf(stderr, "  First pass failed (%d errors).\n",
-                    g_error_count);
-            total_errors += g_error_count;
+            fprintf(stderr, "  First pass failed (%d errors).\n", error_count);
+            total_errors += error_count;
             continue;
         }
-        printf("  Phase 1 OK  IC=%d  DC=%d\n", g_ic, g_dc);
+        printf("  Phase 1 OK  IC=%d  DC=%d\n", IC, DC);
 
-        /* ── Phase 2: second pass ───────────────────────── */
         rc = second_pass(am_path, ob_path, ent_path, ext_path);
-        if (rc != 0 || g_error_count > 0)
+        if (rc != 0 || error_count > 0)
         {
-            fprintf(stderr, "  Second pass failed (%d errors).\n",
-                    g_error_count);
-            total_errors += g_error_count;
+            fprintf(stderr, "  Second pass failed (%d errors).\n", error_count);
+            total_errors += error_count;
             continue;
         }
-        printf("  Phase 2 OK  →  %s\n", ob_path);
+        printf("  Phase 2 OK  -> %s\n", ob_path);
         printf("=== Done ===\n\n");
     }
 
     return (total_errors > 0) ? 1 : 0;
 }
 
-/* ── Helpers ─────────────────────────────────────────────────── */
-
 static void reset_globals(void)
 {
-    memset(g_code_image, 0, sizeof(g_code_image));
-    memset(g_data_image, 0, sizeof(g_data_image));
-    memset(g_sym_table,  0, sizeof(g_sym_table));
-    g_ic          = IC_INIT;
-    g_dc          = 0;
-    g_error_count = 0;
-    g_sym_count   = 0;
+    memset(code_image,   0, sizeof(code_image));
+    memset(data_image,   0, sizeof(data_image));
+    memset(symbol_table, 0, sizeof(symbol_table));
+    IC           = IC_INIT;
+    DC           = 0;
+    error_count  = 0;
+    symbol_count = 0;
 }
 
-static void build_path(char *dest, size_t dest_size,
-                       const char *stem, const char *ext)
+static void build_path(char *dest, size_t dest_size, const char *stem, const char *ext)
 {
     snprintf(dest, dest_size, "%s%s", stem, ext);
 }
 
-/*
- * get_stem  –  Copy 'path' into 'dest', stripping a trailing ".as"
- *              if present.  Returns 0 on success, -1 if path is too long.
- */
 static int get_stem(char *dest, size_t dest_size, const char *path)
 {
     size_t len = strlen(path);
-    size_t stem_len;
+    size_t stem_len = len;
 
     if (len + 1 > dest_size)
-        return -1;
+        return GET_STEM_FAIL;
 
-    stem_len = len;
-    if (len >= 3 &&
-        path[len - 3] == '.' &&
-        path[len - 2] == 'a' &&
-        path[len - 1] == 's')
-    {
-        stem_len = len - 3;
-    }
+    if (len >= SRC_EXT_LEN && path[len - SRC_EXT_LEN] == '.' &&
+        path[len - SRC_EXT_LEN + 1] == 'a' && path[len - 1] == 's')
+        stem_len = len - SRC_EXT_LEN;
 
     strncpy(dest, path, stem_len);
     dest[stem_len] = '\0';
