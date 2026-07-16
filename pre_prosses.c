@@ -1,143 +1,92 @@
-#include    <stdio.h>
-#include    <math.h>
-#include    <stdlib.h>
-#include    <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "assembler.h"
 
-#define         MAX_MACRO_SIZE 100 
+#define MAX_MACRO_SIZE 100
+#define WRITE_COMMENT '#'
+#define MACRO_FILE "macro.txt"
+const char *MACRO_NAME = "mcro";
+const char *MACRO_TABLE[MAX_MACRO_SIZE];
+const char *END_MACRO = "mcroend";
 
-const char*     MACRO_NAME = "mcro";
-const char*     MACRO_TABLE[MAX_MACRO_SIZE];
-const char*     END_MACRO = "mcroend";
-const int       MAX_LINE_SIZE = 256;
+int is_macro(const char *line);
+void write_macro(const char *line);
 
-char* read_line();
-int is_macro(char* line);
-void write_macro(char* line);
-void del_line(char* line);
-
-void main()
+int main(void)
 {
-    int IC =100;
-    int DC =0;
-    int macro =0;
-    int macro_table_index =0;
-    char* line;
-    while(1)
-    {
-        line =read_line();
+    int macro_table_index = 0;
+    char *line;
 
-        if(is_macro(line))
-        {
-            continue;
-        }
-        if(line == MACRO_NAME)
-        {
-            char* current_line =read_line();
-            if (macro_table_index > MAX_MACRO_SIZE)
-            {
-                MACRO_TABLE[macro_table_index] = current_line;
-                macro_table_index+= sizeof(current_line);
-            }
-            else
-            {
-                printf("Macro table is full. Cannot add more macros.\n");
-            }
-            continue;
-        }
-        macro = line==END_MACRO;
-        if (macro)
-        {
-            del_line(line);
-            continue;
-        }
-        else
-        {
+    while (1)
+    {
+        line = read_line();
+        if (line == NULL)
             break;
-        }
-    }
-}
-char* read_line()
-{
-    char** line = malloc(sizeof(char)*MAX_LINE_SIZE);
-    
-    FILE *file = fopen("input.txt", "r");
 
-    if (file == NULL) 
-    {
-        perror("fopen");
-        return NULL;
-    }
-
-
-    if (fgets(*line, sizeof(*line), file) != NULL) 
-    {
-        int i;
-        for (i = 0; *line[i] != '\n'; i++) 
+        if (is_macro(line))
         {
-            if (*line[i] == '\n')
+            free(line);
+            continue;
+        }
+
+        if (strcmp(line, MACRO_NAME) == 0)
+        {
+            char *current_line = read_line();
+            if (current_line == NULL)
             {
+                free(line);
                 break;
             }
+
+            if (macro_table_index < MAX_MACRO_SIZE)
+                MACRO_TABLE[macro_table_index++] = current_line;
+            else
+            {
+                fprintf(stderr, "Macro table is full. Cannot add more macros.\n");
+                free(current_line);
+            }
+
+            free(line);
+            continue;
         }
+
+        if (strcmp(line, END_MACRO) == 0)
+        {
+            del_line(line);
+            free(line);
+            continue;
+        }
+
+        free(line);
+        break;
     }
-    fclose(file);
-    return *line;
+
+    return 0;
 }
-int is_macro(char* line)
+
+int is_macro(const char *line)
 {
-    for (int i = 0; line[i] != '\0'; i++) 
+    for (int i = 0; line[i] != '\0'; i++)
     {
-        if (line[i] == '#') 
+        if (line[i] == WRITE_COMMENT)
         {
             write_macro(line);
-            return 1; // Line is a macro
+            return 1;
         }
     }
-    return 0; // Line is not a macro
+    return 0;
 }
-void write_macro(char* line)
+
+void write_macro(const char *line)
 {
-    FILE *file = fopen("macro.txt", "a");
-    if (file == NULL) 
+    FILE *file = fopen(MACRO_FILE, "a");
+    if (!file)
     {
         perror("fopen");
-        return;
+        exit(1);
     }
 
     fwrite(line, sizeof(char), strlen(line), file);
-    //change to write in the correct format place and the correct stuff
     fclose(file);
-}
-void del_line(char* line)
-{
-    FILE *file = fopen("input.txt", "r");
-    if (file == NULL) 
-    {
-        perror("fopen");
-        return;
-    }
-
-    FILE *temp_file = fopen("temp.txt", "w");
-    if (temp_file == NULL) 
-    {
-        perror("fopen");
-        fclose(file);
-        return;
-    }
-
-    char current_line[256];
-    while (fgets(current_line, sizeof(current_line), file) != NULL) 
-    {
-        if (strcmp(current_line, line) != 0) 
-        {
-            fputs(current_line, temp_file);
-        }
-    }
-
-    fclose(file);
-    fclose(temp_file);
-
-    // Replace the original file with the temporary file
-    remove("input.txt");
-    rename("temp.txt", "input.txt");
 }
